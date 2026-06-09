@@ -8,11 +8,12 @@ from datetime import datetime, timedelta
 from Get_Cookies import Recent_Login, Get_New_Cookies
 from Get_Record import schedule_monitoring
 
-# ==========================================
-# --- 1. 配置区域 ---
-# ==========================================
+# ---------- 路径辅助函数 ----------
+def _safe_path(filename):
+    """返回脚本所在目录下的绝对路径"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, filename)
 
-# 修正后的颜色配置
 DIFFICULTY_COLORS = {
     "入门": "#fe4c61",
     "普及−": "#f39c11",
@@ -24,7 +25,6 @@ DIFFICULTY_COLORS = {
 }
 DEFAULT_COLOR = "#bfbfbf"
 
-# 难度等级映射（用于筛选范围）
 DIFFICULTY_LEVELS = {
     "入门": 0,
     "普及−": 1,
@@ -34,10 +34,7 @@ DIFFICULTY_LEVELS = {
     "省选/NOI−": 5,
     "NOI/NOI+/CTSC": 6
 }
-# 反向映射用于前端下拉框生成
-LEVELS_TO_NAME = {v: k for k, v in DIFFICULTY_LEVELS.items()}
 
-# 桌面右下角弹窗模板 (颜色已更新)
 TOAST_HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -87,31 +84,24 @@ TOAST_HTML_TEMPLATE = """
 </html>
 """
 
-# ==========================================
-# --- 独立弹窗 API ---
-# ==========================================
 class ToastApi:
     def __init__(self, window):
         self.window = window
     def close_toast(self):
         self.window.destroy()
 
-# ==========================================
-# --- 主程序 API ---
-# ==========================================
 class Api:
     def __init__(self):
         self._window = None
         self.loop = None
         self.monitor_task = None
-        self.current_username = None 
-        self.notified_records = set() 
-        self.monitoring_active = False 
+        self.current_username = None
+        self.notified_records = set()
+        self.monitoring_active = False
 
     def set_window(self, window):
         self._window = window
 
-    # --- 基础功能 ---
     def init_check(self):
         user = Recent_Login()
         if user == "Not_Found_User":
@@ -128,13 +118,11 @@ class Api:
         else:
             return {"status": "fail", "message": "用户名或密码错误"}
 
-    # --- 监控逻辑 ---
     def start_monitoring(self, username):
         print(f"[系统] 准备启动监控: {username}")
         self.stop_monitoring()
-        self.monitoring_active = True 
+        self.monitoring_active = True
 
-        # 线程1: 爬虫
         def crawler_thread_target():
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
@@ -142,12 +130,13 @@ class Api:
             self.monitor_task = new_loop.create_task(schedule_monitoring(username, 0.5))
             try:
                 new_loop.run_until_complete(self.monitor_task)
-            except: pass
+            except:
+                pass
             finally:
-                if new_loop.is_running(): new_loop.stop()
+                if new_loop.is_running():
+                    new_loop.stop()
                 new_loop.close()
 
-        # 线程2: 通知检测
         def notification_checker_target():
             print("[系统] 弹窗检测服务已启动")
             while self.monitoring_active:
@@ -167,17 +156,18 @@ class Api:
         if self.loop and self.monitor_task:
             try:
                 self.loop.call_soon_threadsafe(self.monitor_task.cancel)
-            except RuntimeError: pass
+            except RuntimeError:
+                pass
             self.loop = None
             self.monitor_task = None
 
     def check_and_notify(self):
         problem_map = self._load_json('problem_list.json')
         users_data = self._load_json('user_records.json')
-        if not users_data: return
+        if not users_data:
+            return
 
         now = datetime.now()
-
         for user in users_data:
             uid = user.get('user_id')
             uname = user.get('user_name')
@@ -185,37 +175,35 @@ class Api:
                 p_num = record.get('problem_number')
                 p_name = record.get('problem_name')
                 post_date_str = record.get('post_date')
-                
+
                 record_id = f"{uid}_{p_num}_{post_date_str}"
-                
-                if record_id in self.notified_records: continue
-                
+                if record_id in self.notified_records:
+                    continue
+
                 try:
                     record_time = datetime.strptime(post_date_str, "%Y-%m-%d %H:%M:%S")
                     if now - record_time < timedelta(minutes=10):
                         self.notified_records.add(record_id)
-                        
                         difficulty = problem_map.get(p_num, "未知")
                         color = DIFFICULTY_COLORS.get(difficulty, DEFAULT_COLOR)
                         time_display = post_date_str.split(" ")[1]
 
-                        # 1. 桌面弹窗
                         self.show_desktop_toast(uname, p_num, p_name, time_display, difficulty, color)
 
-                        # 2. 应用内弹窗
                         notify_data = {
                             "user_name": uname, "problem_number": p_num, "problem_name": p_name,
                             "time_str": time_display, "difficulty": difficulty, "color": color
                         }
                         if self._window:
                             self._window.evaluate_js(f'createNotificationCard({json.dumps(notify_data)})')
-                        
-                        time.sleep(1) 
-                except ValueError: continue
+                        time.sleep(1)
+                except ValueError:
+                    continue
 
     def show_desktop_toast(self, uname, p_num, p_name, t_str, diff, col):
         screens = webview.screens
-        if not screens: return
+        if not screens:
+            return
         screen = screens[0]
         width, height = 300, 140
         x = int(screen.width - width - 20)
@@ -231,59 +219,69 @@ class Api:
         )
         toast.expose(ToastApi(toast).close_toast)
 
-    # ==========================================
-    # --- 3. 数据查询与排行榜功能 (新增) ---
-    # ==========================================
-
     def _load_json(self, filename):
-        if not os.path.exists(filename): return {} if 'list' in filename else []
+        path = _safe_path(filename)
+        if not os.path.exists(path):
+            return {} if 'list' in filename else []
         try:
-            with open(filename, 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except: return {} if 'list' in filename else []
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"加载 {filename} 出错: {e}")
+            return {} if 'list' in filename else []
 
+    # ---------- 排行榜：只显示监控名单中的用户 ----------
     def get_leaderboard_data(self, days, min_lv, max_lv):
-        """获取排行榜数据"""
         try:
             days = int(days)
-            if days > 60: days = 60 # 限制最大60天
             min_lv = int(min_lv)
             max_lv = int(max_lv)
         except:
             return {"status": "error", "message": "参数错误"}
 
+        # 读取当前监控名单（用户名 → 用户ID列表）
+        monitor_user_ids = []
+        if self.current_username:
+            try:
+                user_ids_data = self._load_json('user_ids.json')
+                monitor_user_ids = user_ids_data.get(self.current_username, [])
+                # 确保所有 ID 为字符串，便于比较
+                monitor_user_ids = [str(uid) for uid in monitor_user_ids]
+            except:
+                pass
+
         users_data = self._load_json('user_records.json')
         problem_map = self._load_json('problem_list.json')
-        
         now = datetime.now()
-        start_date = now - timedelta(days=days)
-        
         leaderboard = []
 
+        filter_by_time = (days > 0)
+        start_date = None
+        if filter_by_time:
+            start_date = now - timedelta(days=days)
+
         for user in users_data:
+            # 只统计监控名单中的用户（保留本地数据不删除）
+            if str(user.get('user_id')) not in monitor_user_ids:
+                continue
+
             valid_count = 0
             uid = user.get('user_id')
             uname = user.get('user_name')
-            
             for record in user.get('records', []):
-                # 1. 时间筛选
-                p_date_str = record.get('post_date')
-                try:
-                    p_date = datetime.strptime(p_date_str, "%Y-%m-%d %H:%M:%S")
-                    if p_date < start_date: continue
-                except: continue
-
-                # 2. 难度筛选
+                if filter_by_time:
+                    p_date_str = record.get('post_date')
+                    try:
+                        p_date = datetime.strptime(p_date_str, "%Y-%m-%d %H:%M:%S")
+                        if p_date < start_date:
+                            continue
+                    except:
+                        continue
                 p_num = record.get('problem_number')
                 difficulty = problem_map.get(p_num, "未知")
-                
-                # 如果是未知难度，通常不计入等级筛选，或者你可以决定是否计入
-                # 这里假设只统计有明确等级的题目
                 level = DIFFICULTY_LEVELS.get(difficulty, -1)
-                
                 if level != -1 and min_lv <= level <= max_lv:
                     valid_count += 1
-            
             if valid_count > 0:
                 leaderboard.append({
                     "user_id": uid,
@@ -291,40 +289,42 @@ class Api:
                     "count": valid_count
                 })
 
-        # 排序
         leaderboard.sort(key=lambda x: x['count'], reverse=True)
         return {"status": "success", "data": leaderboard}
 
-    def get_user_records_page(self, uid, page, page_size=10):
-        """获取单个用户的详细记录（分页）"""
+    def get_user_records_page(self, uid, page, difficulty="", page_size=10):
+        try:
+            page = int(page)
+            page_size = int(page_size)
+        except (ValueError, TypeError):
+            return {"status": "error", "message": "参数错误"}
+
         users_data = self._load_json('user_records.json')
         problem_map = self._load_json('problem_list.json')
-        
+
         target_user = next((u for u in users_data if str(u.get('user_id')) == str(uid)), None)
-        
         if not target_user:
             return {"status": "error", "message": "用户未找到"}
-        
+
         all_records = target_user.get('records', [])
+        if difficulty:
+            all_records = [r for r in all_records if problem_map.get(r['problem_number']) == difficulty]
+
         total = len(all_records)
-        
-        # 计算分页
         start = (page - 1) * page_size
         end = start + page_size
         paged_records = all_records[start:end]
-        
-        # 补充难度颜色信息
+
         processed_records = []
         for r in paged_records:
             p_num = r.get('problem_number')
             diff = problem_map.get(p_num, "未知")
             color = DIFFICULTY_COLORS.get(diff, DEFAULT_COLOR)
-            
             r_copy = r.copy()
             r_copy['difficulty'] = diff
             r_copy['color'] = color
             processed_records.append(r_copy)
-            
+
         return {
             "status": "success",
             "data": processed_records,
@@ -332,69 +332,83 @@ class Api:
             "user_name": target_user.get('user_name')
         }
 
-    # ==========================================
-    # --- 4. 配置管理 (增强) ---
-    # ==========================================
-    
-    def _get_current_uid(self):
-        if not self.current_username: return None
-        data = self._load_json('cookies.json')
-        if isinstance(data, list):
-            for u in data:
-                if u.get('user_name') == self.current_username: return u.get('user_id')
-        return None
-
+    # ---------- 配置管理（使用用户名作为键） ----------
     def get_monitor_config(self):
-        uid = self._get_current_uid()
-        if not uid: return {"status": "error", "message": "User not found"}
-        
-        monitor_list = [] # 仅包含 ID 的列表
+        if not self.current_username:
+            return {"status": "error", "message": "User not found"}
+
+        monitor_list = []
         try:
             user_ids_data = self._load_json('user_ids.json')
-            monitor_list = user_ids_data.get(str(uid), [])
-        except: pass
-        
-        # --- 增强：匹配用户名 ---
+            monitor_list = user_ids_data.get(self.current_username, [])
+        except:
+            pass
+
         users_records = self._load_json('user_records.json')
-        # 创建 ID -> Name 映射
         id_name_map = {str(u['user_id']): u['user_name'] for u in users_records}
-        
         enhanced_list = []
         for m_uid in monitor_list:
             name = id_name_map.get(str(m_uid), "未知用户")
             enhanced_list.append({"id": str(m_uid), "name": name})
-            
-        return {"status": "success", "data": enhanced_list, "current_uid": uid}
+
+        return {"status": "success", "data": enhanced_list, "current_uid": self.current_username}
 
     def save_monitor_config(self, new_list):
-        # new_list 只是 ID 的列表
-        uid = self._get_current_uid()
-        if not uid: return {"status": "error", "message": "Auth failed"}
-        
-        data = self._load_json('user_ids.json')
-        if isinstance(data, list): data = {} # 防错
-        
-        data[str(uid)] = new_list
+        if not self.current_username:
+            return {"status": "error", "message": "Auth failed"}
+
+        path = _safe_path('user_ids.json')
+        data = {}
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except:
+                data = {}
+        if isinstance(data, list):
+            data = {}
+
+        # 使用用户名作为键
+        data[self.current_username] = new_list
         try:
-            with open('user_ids.json', 'w', encoding='utf-8') as f: json.dump(data, f, indent=4)
-        except Exception as e: return {"status": "error", "message": str(e)}
-        
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
         print(f"[系统] 配置更新，重启监控...")
         self.start_monitoring(self.current_username)
         return {"status": "success"}
 
-    # --- 其他 ---
     def logout(self):
         self.stop_monitoring()
+        path = _safe_path('cookies.json')
+        cookies = []
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    cookies = json.load(f)
+            except:
+                cookies = []
+        if isinstance(cookies, list) and self.current_username:
+            new_cookies = [c for c in cookies if c.get('user_name') != self.current_username]
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(new_cookies, f, ensure_ascii=False, indent=2)
+            except:
+                pass
         self.current_username = None
         return {"status": "logged_out"}
-    def close_app(self): self._window.destroy()
+
+    def close_app(self):
+        self._window.destroy()
+
 
 if __name__ == '__main__':
-    api = Api() 
+    api = Api()
     window = webview.create_window(
         'Luogu Monitor Pro', 'web/index.html',
-        width=950, height=800, # 稍微调大一点适应排行榜
+        width=950, height=800,
         resizable=False, js_api=api, frameless=True, easy_drag=True
     )
     api.set_window(window)

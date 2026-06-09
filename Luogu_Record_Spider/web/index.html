@@ -51,13 +51,21 @@
                 
                 <div class="filter-bar">
                     <div class="filter-item">
-                        <label>近</label>
-                        <input type="number" id="filter-days" value="7" min="1" max="60" style="width: 50px;">
-                        <label>天</label>
+                        <label>时间范围：</label>
+                        <select id="filter-days" onchange="handleTimeFilterChange()">
+                            <option value="7">近7天</option>
+                            <option value="30">近30天</option>
+                            <option value="90">近90天</option>
+                            <option value="0">全部时间</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                        <input type="number" id="custom-days-input" placeholder="天数" min="1" style="width: 70px; display: none;">
                     </div>
+
                     <div class="filter-item">
-                        <label>难度范围：</label>
-                        <select id="filter-min-lv">
+                        <label>最低难度：</label>
+                        <div id="min-difficulty-dropdown" class="custom-select"></div>
+                        <select id="filter-min-lv" style="display:none;">
                             <option value="0">入门</option>
                             <option value="1">普及−</option>
                             <option value="2">普及/提高−</option>
@@ -66,8 +74,14 @@
                             <option value="5">省选/NOI−</option>
                             <option value="6">NOI/CTSC</option>
                         </select>
-                        <span>至</span>
-                        <select id="filter-max-lv">
+                    </div>
+
+                    <div class="filter-item"><label>至</label></div>
+
+                    <div class="filter-item">
+                        <label>最高难度：</label>
+                        <div id="max-difficulty-dropdown" class="custom-select"></div>
+                        <select id="filter-max-lv" style="display:none;">
                             <option value="0">入门</option>
                             <option value="1">普及−</option>
                             <option value="2">普及/提高−</option>
@@ -77,6 +91,7 @@
                             <option value="6" selected>NOI/CTSC</option>
                         </select>
                     </div>
+
                     <button class="search-btn" onclick="loadLeaderboard()">查询</button>
                 </div>
 
@@ -122,20 +137,33 @@
         </div>
     </div>
 
-    <div id="user-detail-modal" class="modal-overlay hidden">
-        <div class="modal-card" style="width: 600px;">
+    <div id="user-detail-modal" class="modal-overlay hidden user-detail-modal">
+        <div class="modal-card" style="width: 620px; max-height: 85vh;">
             <div class="modal-header">
                 <h3>用户提交记录: <span id="detail-username"></span></h3>
                 <span class="close-icon" onclick="closeUserDetailModal()">×</span>
             </div>
             <div class="modal-body" style="padding: 0;">
+                <div style="padding: 10px 15px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size:13px;">题目难度：</label>
+                    <div id="detail-difficulty-dropdown" class="custom-select"></div>
+                    <select id="detail-difficulty-filter" style="display:none;">
+                        <option value="">全部</option>
+                        <option value="入门">入门</option>
+                        <option value="普及−">普及−</option>
+                        <option value="普及/提高−">普及/提高−</option>
+                        <option value="普及+/提高">普及+/提高</option>
+                        <option value="提高+/省选">提高+/省选</option>
+                        <option value="省选/NOI−">省选/NOI−</option>
+                        <option value="NOI/NOI+/CTSC">NOI/CTSC</option>
+                    </select>
+                </div>
                 <div class="record-list-header">
                     <span style="flex:1">时间</span>
                     <span style="flex:2">题目</span>
                     <span style="flex:1; text-align:right;">难度</span>
                 </div>
-                <div id="user-record-list" class="record-list-container">
-                    </div>
+                <div id="user-record-list" class="record-list-container"></div>
                 <div class="pagination-bar">
                     <button id="prev-page-btn" onclick="changePage(-1)">上一页</button>
                     <span id="page-info">第 1 页</span>
@@ -148,19 +176,123 @@
     <div id="notification-container"></div>
 
     <script>
-        // --- 全局变量 ---
-        let currentMonitorList = []; // 存储 {id, name} 对象
+        // ---------- 难度颜色映射 ----------
+        const DIFF_LABEL_COLORS = {
+            "入门": "#fe4c61",
+            "普及−": "#f39c11",
+            "普及/提高−": "#ffc116",
+            "普及+/提高": "#53c41a",
+            "提高+/省选": "#3498db",
+            "省选/NOI−": "#9c3dcf",
+            "NOI/CTSC": "#0e1d69",
+            "全部": "#aaa"
+        };
+
+        function getColorByLabel(label) {
+            return DIFF_LABEL_COLORS[label] || '#aaa';
+        }
+
+        // ---------- 全局变量 ----------
+        let currentMonitorList = [];
         let currentDetailUid = null;
         let currentDetailPage = 1;
-        
-        // --- 初始化 ---
-        function waitForPywebview() {
-            if (window.pywebview) {
-                initCheck();
-            } else {
-                setTimeout(waitForPywebview, 100);
-            }
+
+        // ---------- 自定义下拉组件 ----------
+        function createCustomDropdown(containerId, selectId, onChangeCallback) {
+            const container = document.getElementById(containerId);
+            const select = document.getElementById(selectId);
+            if (!container || !select) return;
+
+            container.innerHTML = '';
+            const options = Array.from(select.options);
+
+            const trigger = document.createElement('div');
+            trigger.className = 'select-trigger';
+            container.appendChild(trigger);
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'select-dropdown';
+            container.appendChild(dropdown);
+
+            options.forEach(opt => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'select-option';
+                optionDiv.textContent = opt.text;
+                const bgColor = getColorByLabel(opt.text);
+                optionDiv.style.backgroundColor = bgColor;
+                optionDiv.dataset.value = opt.value;
+
+                optionDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select.value = opt.value;
+                    updateTriggerDisplay(trigger, opt.text, bgColor);
+                    dropdown.classList.remove('show');
+                    trigger.classList.remove('open');
+                    if (onChangeCallback) onChangeCallback(opt.value);
+                });
+
+                dropdown.appendChild(optionDiv);
+            });
+
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = dropdown.classList.contains('show');
+                document.querySelectorAll('.select-dropdown.show').forEach(d => d.classList.remove('show'));
+                document.querySelectorAll('.select-trigger.open').forEach(t => t.classList.remove('open'));
+                if (!isOpen) {
+                    dropdown.classList.add('show');
+                    trigger.classList.add('open');
+                }
+            });
+
+            document.addEventListener('click', () => {
+                dropdown.classList.remove('show');
+                trigger.classList.remove('open');
+            });
+
+            const initOption = select.options[select.selectedIndex];
+            const initText = initOption.text;
+            const initColor = getColorByLabel(initText);
+            updateTriggerDisplay(trigger, initText, initColor);
+
+            container._updateDisplay = (value) => {
+                const idx = Array.from(options).findIndex(o => o.value === value);
+                if (idx >= 0) {
+                    const opt = options[idx];
+                    const color = getColorByLabel(opt.text);
+                    updateTriggerDisplay(trigger, opt.text, color);
+                    select.value = value;
+                }
+            };
         }
+
+        function updateTriggerDisplay(trigger, text, bgColor) {
+            trigger.innerHTML = `${text} <span class="select-arrow">▼</span>`;
+            trigger.style.backgroundColor = bgColor;
+        }
+
+        function initAllDropdowns() {
+            createCustomDropdown('min-difficulty-dropdown', 'filter-min-lv');
+            createCustomDropdown('max-difficulty-dropdown', 'filter-max-lv');
+            createCustomDropdown('detail-difficulty-dropdown', 'detail-difficulty-filter', () => {
+                loadUserPage();
+            });
+        }
+
+        function resetDetailDropdown() {
+            const container = document.getElementById('detail-difficulty-dropdown');
+            if (container && container._updateDisplay) {
+                container._updateDisplay('');
+            }
+            document.getElementById('detail-difficulty-filter').value = '';
+        }
+
+        // ---------- 初始化 ----------
+        function waitForPywebview() {
+            if (window.pywebview) initCheck();
+            else setTimeout(waitForPywebview, 100);
+        }
+
         async function initCheck() {
             try {
                 const res = await pywebview.api.init_check();
@@ -169,15 +301,12 @@
             } catch (e) {}
         }
 
-        // --- 登录 ---
         async function submitLogin() {
             const userIn = document.getElementById('username').value;
             const passIn = document.getElementById('password').value;
             const btn = document.getElementById('login-btn');
             const overlay = document.getElementById('loading-overlay');
-            
             if(!userIn || !passIn) return alert("请输入账号密码");
-            
             btn.disabled = true; overlay.classList.remove('hidden');
             try {
                 const res = await pywebview.api.attempt_login(userIn, passIn);
@@ -194,67 +323,64 @@
             document.getElementById('login-container').style.display = 'none';
             const main = document.getElementById('main-interface');
             main.style.opacity = '1'; main.style.pointerEvents = 'auto';
-            
-            // 自动加载一次排行榜
             loadLeaderboard();
         }
 
-        // ==========================================
-        // --- 排行榜功能 ---
-        // ==========================================
+        function handleTimeFilterChange() {
+            const select = document.getElementById('filter-days');
+            const customInput = document.getElementById('custom-days-input');
+            customInput.style.display = select.value === 'custom' ? 'inline-block' : 'none';
+        }
+
+        function getSelectedDays() {
+            const select = document.getElementById('filter-days');
+            if (select.value === 'custom') {
+                const customVal = document.getElementById('custom-days-input').value;
+                return customVal || '0';
+            }
+            return select.value;
+        }
+
         async function loadLeaderboard() {
-            const days = document.getElementById('filter-days').value;
+            const days = getSelectedDays();
             const minLv = document.getElementById('filter-min-lv').value;
             const maxLv = document.getElementById('filter-max-lv').value;
             const tbody = document.querySelector('#leaderboard-table tbody');
-            
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">加载中...</td></tr>';
-            
             try {
                 const res = await pywebview.api.get_leaderboard_data(days, minLv, maxLv);
-                if(res.status === 'success') {
-                    renderLeaderboard(res.data);
-                } else {
-                    alert(res.message);
-                }
+                if(res.status === 'success') renderLeaderboard(res.data);
+                else alert(res.message);
             } catch(e) { alert("查询失败: " + e); }
         }
 
         function renderLeaderboard(data) {
             const tbody = document.querySelector('#leaderboard-table tbody');
             tbody.innerHTML = '';
-            
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#999; padding:20px;">该范围内无提交记录</td></tr>';
                 return;
             }
-
             data.forEach((item, index) => {
                 const tr = document.createElement('tr');
-                // 前三名加图标
                 let rankStr = index + 1;
                 if(index === 0) rankStr = '🥇 1';
                 if(index === 1) rankStr = '🥈 2';
                 if(index === 2) rankStr = '🥉 3';
-
                 tr.innerHTML = `
                     <td style="text-align:center; font-weight:bold;">${rankStr}</td>
                     <td>${item.user_name} <span style="font-size:12px; color:#999;">(${item.user_id})</span></td>
                     <td style="text-align:center; color:#53c41a; font-weight:bold;">${item.count}</td>
-                    <td style="text-align:center;">
-                        <button class="small-btn" onclick="openUserDetail('${item.user_id}')">详情</button>
-                    </td>
+                    <td style="text-align:center;"><button class="small-btn" onclick="openUserDetail('${item.user_id}')">详情</button></td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        // ==========================================
-        // --- 用户详情 & 分页 ---
-        // ==========================================
         function openUserDetail(uid) {
             currentDetailUid = uid;
             currentDetailPage = 1;
+            resetDetailDropdown();
             document.getElementById('user-detail-modal').classList.remove('hidden');
             loadUserPage();
         }
@@ -262,9 +388,9 @@
         async function loadUserPage() {
             const container = document.getElementById('user-record-list');
             container.innerHTML = '<div style="padding:20px; text-align:center;">加载中...</div>';
-            
+            const difficulty = document.getElementById('detail-difficulty-filter').value;
             try {
-                const res = await pywebview.api.get_user_records_page(currentDetailUid, currentDetailPage);
+                const res = await pywebview.api.get_user_records_page(currentDetailUid, currentDetailPage, difficulty);
                 if(res.status === 'success') {
                     document.getElementById('detail-username').innerText = res.user_name;
                     renderRecordList(res.data);
@@ -278,16 +404,13 @@
         function renderRecordList(records) {
             const container = document.getElementById('user-record-list');
             container.innerHTML = '';
-            
             if(records.length === 0) {
                 container.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">本页无数据</div>';
                 return;
             }
-
             records.forEach(r => {
                 const row = document.createElement('div');
                 row.className = 'record-row';
-                // 使用后端传回的 color
                 row.innerHTML = `
                     <span style="flex:1; font-size:13px; color:#666;">${r.post_date}</span>
                     <span style="flex:2; font-weight:500;">${r.problem_name} <span style="font-size:12px;color:#999;">(${r.problem_number})</span></span>
@@ -316,16 +439,14 @@
             document.getElementById('user-detail-modal').classList.add('hidden');
         }
 
-        // ==========================================
-        // --- 监控配置 (用户名: 编号) ---
-        // ==========================================
+        // ---------- 监控配置 ----------
         async function openConfigModal() {
             document.getElementById('config-modal').classList.remove('hidden');
             document.getElementById('uid-tags-area').innerHTML = '加载中...';
             try {
                 const res = await pywebview.api.get_monitor_config();
                 if(res.status === 'success') {
-                    currentMonitorList = res.data; // [{id: "1", name: "xx"}, ...]
+                    currentMonitorList = res.data;
                     renderConfigTags();
                 }
             } catch(e) { alert(e); }
@@ -340,7 +461,6 @@
             currentMonitorList.forEach((item, idx) => {
                 const tag = document.createElement('div');
                 tag.className = 'uid-tag';
-                // 显示：用户名: ID
                 tag.innerHTML = `${item.name}: ${item.id} <span onclick="removeMonitorItem(${idx})">×</span>`;
                 container.appendChild(tag);
             });
@@ -349,10 +469,7 @@
         function addUidItem() {
             const val = document.getElementById('new-uid-input').value.trim();
             if(!val) return;
-            // 查重
             if(currentMonitorList.some(i => i.id === val)) return alert("已存在");
-            
-            // 暂时添加 ID，名字设为"待获取" (只有保存重启爬虫后才能获取真名)
             currentMonitorList.push({id: val, name: "新增"});
             renderConfigTags();
             document.getElementById('new-uid-input').value = '';
@@ -366,7 +483,6 @@
         async function saveConfig() {
             const btn = document.querySelector('#config-modal .save-btn');
             btn.innerText = "保存中..."; btn.disabled = true;
-            // 只提取 ID 发送给后端
             const idsOnly = currentMonitorList.map(item => item.id);
             try {
                 const res = await pywebview.api.save_monitor_config(idsOnly);
@@ -379,7 +495,7 @@
         }
         function closeConfigModal() { document.getElementById('config-modal').classList.add('hidden'); }
 
-        // --- 应用内通知 (被动接收) ---
+        // ---------- 通知 ----------
         function createNotificationCard(data) {
             const container = document.getElementById('notification-container');
             const card = document.createElement('div');
@@ -394,11 +510,16 @@
             setTimeout(() => { card.classList.add('fade-out'); setTimeout(()=>card.remove(),500); }, 8000);
         }
 
-        // --- 通用 ---
         function toggleDropdown() { document.getElementById('user-menu').classList.toggle('active'); }
         window.onclick = e => { if(!e.target.closest('.user-profile')) document.getElementById('user-menu').classList.remove('active'); }
         async function handleLogout(e) { e.stopPropagation(); await pywebview.api.logout(); location.reload(); }
         function closeApp() { pywebview.api.close_app(); }
+
+        // 启动
+        window.addEventListener('load', () => {
+            handleTimeFilterChange();
+            initAllDropdowns();
+        });
 
         waitForPywebview();
     </script>

@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luogu Monitor Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <script>
+        window.onerror = function(msg, url, line) {
+            alert('JS Error: ' + msg + '\nLine: ' + line);
+            return false;
+        };
+    </script>
+</head>
+<body>
+<div id="global-close-btn" class="close-btn">×</div>
+
+<div id="login-container">
+    <div class="card" id="login-card">
+        <h2>用户登录</h2>
+        <div id="login-form">
+            <input type="text" id="username" placeholder="用户名">
+            <input type="password" id="password" placeholder="密码">
+            <button id="login-btn">登 录</button>
+            <div id="message" style="color:red; margin-top:10px; font-size:12px;"></div>
+        </div>
+        <div id="loading-overlay" class="hidden" style="margin-top:20px;">
+            <div style="color: #666;">正在连接系统...</div>
+        </div>
+    </div>
+</div>
+
+<div id="main-interface">
+    <div class="navbar">
+        <div class="logo">Luogu Monitor Pro</div>
+        <div class="right-area">
+            <div class="theme-icon" id="log-btn" data-tooltip="查看日志">📄</div>
+            <div class="theme-icon" id="csv-btn" data-tooltip="导出排行榜为 CSV">📥</div>
+            <div class="theme-icon" id="theme-btn" data-tooltip="主题设置">🎨</div>
+            <div class="user-profile" id="user-profile">
+                <span class="user-name" id="display-username">User</span>
+                <div class="avatar" id="display-avatar">U</div>
+                <div class="dropdown-menu" id="user-menu">
+                    <div class="dropdown-item" id="logout-item">退出登录</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-area">
+        <div class="dashboard-card">
+            <h3>监控控制台</h3>
+            <p>当前状态：<span id="monitor-status-text" style="color: #53c41a; font-weight: bold;">运行中</span></p>
+            <p id="signature-text" class="editable-signature" contenteditable="true" spellcheck="false" title="点击编辑个性签名">后台自动抓取中。新提交将触发双重弹窗提醒。</p>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button id="pause-resume-btn" class="action-btn">⏸️ 暂停监控</button>
+                <button id="manual-monitor-btn" class="action-btn">🔄 立即监控</button>
+                <button id="config-btn" class="action-btn">📋 管理监控名单</button>
+            </div>
+        </div>
+
+        <div class="dashboard-card leaderboard-section" style="margin-top: 20px;">
+            <h3>提交排行榜</h3>
+            <div class="filter-bar">
+                <div class="filter-item">
+                    <label>时间范围：</label>
+                    <select id="filter-days">
+                        <option value="7">近7天</option>
+                        <option value="15">近15天</option>
+                        <option value="30">近30天</option>
+                        <option value="90">近90天</option>
+                        <option value="0" selected>全部时间</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                    <input type="number" id="custom-days-input" placeholder="天数" min="1" style="width: 70px; display: none;">
+                </div>
+                <div class="filter-item">
+                    <label>最低难度：</label>
+                    <div id="min-difficulty-dropdown" class="custom-select"></div>
+                    <select id="filter-min-lv" style="display:none;">
+                        <option value="0">入门</option>
+                        <option value="1">普及−</option>
+                        <option value="2">普及</option>
+                        <option value="3">普及+/提高−</option>
+                        <option value="4">提高</option>
+                        <option value="5">提高+/省选−</option>
+                        <option value="6">省选/NOI−</option>
+                        <option value="7">NOI/NOI+/CTS</option>
+                    </select>
+                </div>
+                <div class="filter-item"><label>至</label></div>
+                <div class="filter-item">
+                    <label>最高难度：</label>
+                    <div id="max-difficulty-dropdown" class="custom-select"></div>
+                    <select id="filter-max-lv" style="display:none;">
+                        <option value="0">入门</option>
+                        <option value="1">普及−</option>
+                        <option value="2">普及</option>
+                        <option value="3">普及+/提高−</option>
+                        <option value="4">提高</option>
+                        <option value="5">提高+/省选−</option>
+                        <option value="6">省选/NOI−</option>
+                        <option value="7" selected>NOI/NOI+/CTS</option>
+                    </select>
+                </div>
+                <div class="filter-item" style="margin-left: 5px;">
+                    <label><input type="checkbox" id="include-none-checkbox" checked> 包括暂无评定/未评定</label>
+                </div>
+                <button class="search-btn" id="search-btn">查询</button>
+            </div>
+            <div class="table-container">
+                <table id="leaderboard-table">
+                    <thead><tr><th width="60">排名</th><th>用户</th><th width="100">通过数</th><th width="80">操作</th></tr></thead>
+                    <tbody><tr><td colspan="4" style="text-align:center; color:#999;">点击查询加载数据</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 自定义确认对话框 -->
+<div id="confirm-dialog" class="modal-overlay hidden">
+    <div class="modal-card" style="width: 340px; padding: 20px; text-align: center;">
+        <div style="font-size: 16px; margin-bottom: 20px; color: var(--text-color);" id="confirm-message"></div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="cancel-btn" id="confirm-cancel" style="width: auto; padding: 8px 20px;">取消</button>
+            <button class="save-btn" id="confirm-ok" style="width: auto; padding: 8px 20px;">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- 备注编辑弹窗 -->
+<div id="note-edit-dialog" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div style="font-size: 16px; margin-bottom: 12px; color: var(--text-color);">编辑备注</div>
+        <input type="text" id="note-edit-input" placeholder="输入备注（留空则清除）" style="width:100%; margin-bottom:20px;">
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="cancel-btn" id="note-edit-cancel" style="width: auto; padding: 8px 20px;">取消</button>
+            <button class="save-btn" id="note-edit-save" style="width: auto; padding: 8px 20px;">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 监控名单弹窗 -->
+<div id="config-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-header"><h3>监控名单管理</h3><span class="close-icon" id="close-config-modal">×</span></div>
+        <div class="modal-body">
+            <div class="input-group">
+                <input type="text" id="new-uid-input" placeholder="输入用户 ID (如 102468)">
+                <button class="add-btn" id="add-uid-btn">添加</button>
+            </div>
+            <div class="uid-list-container">
+                <p style="font-size: 12px; color: #666; margin-bottom: 5px;">当前监控的用户列表：</p>
+                <div id="uid-tags-area" class="tags-area"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="cancel-btn" id="cancel-config-btn">取消</button>
+            <button class="save-btn" id="save-config-btn">保存并重启监控</button>
+        </div>
+    </div>
+</div>
+
+<!-- 用户详情弹窗 -->
+<div id="user-detail-modal" class="modal-overlay hidden user-detail-modal">
+    <div class="modal-card" style="width: 620px; max-height: 85vh;">
+        <div class="modal-header">
+            <h3>用户提交记录: <span id="detail-username"></span></h3>
+            <span class="close-icon" id="close-user-detail-modal">×</span>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+            <div class="detail-filter-bar">
+                <label style="font-size:13px;">题目难度：</label>
+                <div id="detail-difficulty-dropdown" class="custom-select"></div>
+                <select id="detail-difficulty-filter" style="display:none;">
+                    <option value="">全部</option>
+                    <option value="入门">入门</option>
+                    <option value="普及−">普及−</option>
+                    <option value="普及">普及</option>
+                    <option value="普及+/提高−">普及+/提高−</option>
+                    <option value="提高">提高</option>
+                    <option value="提高+/省选−">提高+/省选−</option>
+                    <option value="省选/NOI−">省选/NOI−</option>
+                    <option value="NOI/NOI+/CTS">NOI/NOI+/CTS</option>
+                    <option value="暂无评定">暂无评定</option>
+                    <option value="未知">未知</option>
+                </select>
+            </div>
+            <div class="record-list-header"><span style="flex:1">时间</span><span style="flex:2">题目</span><span style="flex:1; text-align:right;">难度</span></div>
+            <div id="user-record-list" class="record-list-container"></div>
+            <div class="pagination-bar">
+                <button id="prev-page-btn">上一页</button>
+                <span id="page-info">第 1 页</span>
+                <button id="next-page-btn">下一页</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 通知容器 -->
+<div id="notification-container"></div>
+
+<!-- 主题设置弹窗 -->
+<div id="theme-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="width: 860px; max-height: 90vh; overflow-y: auto; padding: 12px;">
+        <div class="modal-header" style="padding: 10px 15px;">
+            <h3>主题设置</h3>
+            <span class="close-icon" id="close-theme-modal">×</span>
+        </div>
+        <div class="modal-body" style="padding: 8px;">
+            <div style="margin-bottom: 8px;">
+                <label>预设主题：</label>
+                <div style="display: flex; gap: 6px; margin-top: 4px; flex-wrap: nowrap;">
+                    <button class="preset-btn" data-theme="default" style="padding: 4px 10px; white-space:nowrap;">紫罗兰</button>
+                    <button class="preset-btn" data-theme="ink" style="padding: 4px 10px; white-space:nowrap;">砚凝紫</button>
+                    <button class="preset-btn" data-theme="blue" style="padding: 4px 10px; white-space:nowrap;">清爽蓝</button>
+                    <button class="preset-btn" data-theme="light" style="padding: 4px 10px; white-space:nowrap;">极简白</button>
+                </div>
+            </div>
+            <div style="margin-bottom: 6px;">
+                <label>自定义主题</label>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; margin-top: 4px;">
+                    <div class="color-row"><span class="color-label">背景开始色</span><input type="color" id="c-bg-start" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">背景结束色</span><input type="color" id="c-bg-end" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">卡片背景</span><input type="color" id="c-card-bg" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">主界面背景</span><input type="color" id="c-main-bg" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">主题色</span><input type="color" id="c-primary" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">主要文字</span><input type="color" id="c-text" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">辅助文字</span><input type="color" id="c-text-secondary" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">边框颜色</span><input type="color" id="c-border" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">导航栏背景</span><input type="color" id="c-header-bg" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">表头背景</span><input type="color" id="c-table-header" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">标签背景</span><input type="color" id="c-tag-bg" class="custom-color-input"></div>
+                    <div class="color-row"><span class="color-label">关闭按钮色</span><input type="color" id="c-close-btn" class="custom-color-input"></div>
+                </div>
+            </div>
+            <div style="background: var(--card-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px; margin-bottom: 8px;">
+                <div style="font-size:12px; margin-bottom:4px;">预览效果</div>
+                <div id="custom-preview" style="border-radius:4px; overflow:hidden;">
+                    <div style="height:30px; background:var(--primary-color); display:flex; align-items:center; justify-content:center; color:white; font-size:12px;">按钮预览</div>
+                    <div style="padding:8px; background:var(--card-bg); color:var(--text-color); border-top:1px solid var(--border-color); font-size:12px;">
+                        卡片文字示例 — 主要文字
+                        <span style="color:var(--text-secondary);">辅助文字</span>
+                    </div>
+                    <div style="background:var(--table-header-bg); padding:5px; color:var(--text-secondary); font-size:11px; border-top:1px solid var(--border-color);">表头区域</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 16px; justify-content: flex-end;">
+                <button id="reset-custom-theme" class="cancel-btn" style="padding: 5px 16px;">重置</button>
+                <button id="apply-custom-theme" class="action-btn" style="padding: 5px 16px;">保存并应用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志弹窗 -->
+<div id="log-modal" class="modal-overlay hidden">
+    <div class="modal-card" style="width: 700px; max-height: 80vh;">
+        <div class="modal-header">
+            <h3>应用日志</h3>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span class="log-refresh-btn" id="refresh-logs-btn" title="刷新日志">⟳</span>
+                <span class="close-icon" id="close-log-modal">×</span>
+            </div>
+        </div>
+        <div class="modal-body" style="padding: 10px; max-height: 55vh; overflow-y: auto;">
+            <div id="log-entries" style="display: flex; flex-direction: column; gap: 6px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="cancel-btn" id="clear-logs-btn">清空日志</button>
+            <button class="cancel-btn" id="export-logs-btn">导出日志</button>
+            <button class="save-btn" id="close-log-btn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DIFF_LABEL_COLORS = {
+        "全部": "#78909C",
+        "未知": "#666666",
+        "暂无评定": "#bfbfbf",
+        "入门": "#FF4A5A",
+        "普及−": "#F29422",
+        "普及": "#FFBC00",
+        "普及+/提高−": "#48C038",
+        "提高": "#20C0C8",
+        "提高+/省选−": "#3698E0",
+        "省选/NOI−": "#9955DD",
+        "NOI/NOI+/CTS": "#1A2860"
+    };
+    function getColorByLabel(label) { return DIFF_LABEL_COLORS[label] || '#aaa'; }
+
+    let currentMonitorList = [];
+    let currentDetailUid = null;
+    let currentDetailPage = 1;
+    let currentEditIndex = -1;
+
+    function showConfirm(message) {
+        return new Promise((resolve) => {
+            document.getElementById('confirm-message').textContent = message;
+            document.getElementById('confirm-dialog').classList.remove('hidden');
+            document.getElementById('confirm-ok').onclick = () => {
+                document.getElementById('confirm-dialog').classList.add('hidden');
+                resolve(true);
+            };
+            document.getElementById('confirm-cancel').onclick = () => {
+                document.getElementById('confirm-dialog').classList.add('hidden');
+                resolve(false);
+            };
+        });
+    }
+
+    function closeApp() {
+        try { pywebview.api.close_app(); } catch (e) {}
+        setTimeout(() => window.close(), 100);
+    }
+
+    async function submitLogin() {
+        const userIn = document.getElementById('username').value;
+        const passIn = document.getElementById('password').value;
+        const btn = document.getElementById('login-btn');
+        const overlay = document.getElementById('loading-overlay');
+        if (!userIn || !passIn) return alert("请输入账号密码");
+        btn.disabled = true;
+        overlay.classList.remove('hidden');
+        try {
+            const res = await pywebview.api.attempt_login(userIn, passIn);
+            if (res.status === 'success') {
+                showWelcome(res.username);
+            } else {
+                alert(res.message || "登录失败");
+                btn.disabled = false;
+                overlay.classList.add('hidden');
+            }
+        } catch (e) {
+            alert("登录请求失败：" + e);
+            btn.disabled = false;
+            overlay.classList.add('hidden');
+        }
+    }
+
+    function showWelcome(username) {
+        pywebview.api.start_monitoring(username);
+        document.getElementById('display-username').innerText = username;
+        document.getElementById('display-avatar').innerText = username.charAt(0).toUpperCase();
+        document.getElementById('loading-overlay').classList.add('hidden');
+        document.getElementById('login-container').style.display = 'none';
+        const main = document.getElementById('main-interface');
+        main.style.opacity = '1';
+        main.style.pointerEvents = 'auto';
+        loadMonitorStatus();
+        loadSignature();
+        loadLeaderboard();
+    }
+
+    async function loadMonitorStatus() {
+        try {
+            const res = await pywebview.api.get_monitor_status();
+            if (res.status === 'success') updatePauseButton(res.paused);
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadSignature() {
+        try {
+            const sig = await pywebview.api.get_signature();
+            document.getElementById('signature-text').innerText = sig;
+        } catch (e) { console.error(e); }
+    }
+
+    async function togglePauseResume() {
+        try {
+            const res = await pywebview.api.toggle_monitoring_pause();
+            if (res.status === 'success') updatePauseButton(res.paused);
+        } catch (e) { alert("操作失败：" + e); }
+    }
+
+    function updatePauseButton(paused) {
+        const btn = document.getElementById('pause-resume-btn');
+        const statusSpan = document.getElementById('monitor-status-text');
+        if (paused) {
+            btn.innerHTML = '▶️ 恢复监控';
+            statusSpan.innerText = '已暂停';
+            statusSpan.style.color = '#e67e22';
+        } else {
+            btn.innerHTML = '⏸️ 暂停监控';
+            statusSpan.innerText = '运行中';
+            statusSpan.style.color = '#53c41a';
+        }
+    }
+
+    async function saveSignature() {
+        const newText = document.getElementById('signature-text').innerText;
+        try {
+            const res = await pywebview.api.update_signature(newText);
+            if (res.status !== 'success') alert("保存签名失败：" + res.message);
+        } catch (e) { console.error(e); }
+    }
+
+    function handleTimeFilterChange() {
+        const select = document.getElementById('filter-days');
+        const customInput = document.getElementById('custom-days-input');
+        customInput.style.display = select.value === 'custom' ? 'inline-block' : 'none';
+    }
+
+    function getSelectedDays() {
+        const select = document.getElementById('filter-days');
+        if (select.value === 'custom') {
+            const customVal = document.getElementById('custom-days-input').value;
+            return customVal || '0';
+        }
+        return select.value;
+    }
+
+    async function loadLeaderboard() {
+        const days = getSelectedDays();
+        const minLv = document.getElementById('filter-min-lv').value;
+        const maxLv = document.getElementById('filter-max-lv').value;
+        const includeNone = document.getElementById('include-none-checkbox').checked;
+        const tbody = document.querySelector('#leaderboard-table tbody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">加载中...</td></tr>';
+        try {
+            const res = await pywebview.api.get_leaderboard_data(days, minLv, maxLv, includeNone);
+            if (res.status === 'success') renderLeaderboard(res.data);
+            else alert(res.message);
+        } catch (e) { alert("查询失败: " + e); }
+    }
+
+    function renderLeaderboard(data) {
+        const tbody = document.querySelector('#leaderboard-table tbody');
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#999; padding:20px;">该范围内无提交记录</td></tr>';
+            return;
+        }
+        data.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            let rankStr = '';
+            if (index === 0) rankStr = '🥇   1';
+            else if (index === 1) rankStr = '🥈   2';
+            else if (index === 2) rankStr = '🥉   3';
+            else rankStr = '&thinsp;&thinsp;&emsp;' + (index + 1);
+            // 用户列：有备注时显示“备注  userName (ID)”，否则仅显示“userName (ID)”
+            const hasNote = item.note && item.note.trim() !== '';
+            let userDisplay;
+            if (hasNote) {
+                userDisplay = `${item.note}  ${item.user_name} <span style="font-size:12px; color:#999;">(${item.user_id})</span>`;
+            } else {
+                userDisplay = `${item.user_name} <span style="font-size:12px; color:#999;">(${item.user_id})</span>`;
+            }
+            const noteParam = item.note || "";
+            const userNameParam = item.user_name.replace(/'/g, "\\'");
+            tr.innerHTML = `<td style="text-align:center; font-weight:bold;">${rankStr}</td><td>${userDisplay}</td><td style="text-align:center; color:#53c41a; font-weight:bold;">${item.count}</td><td style="text-align:center;"><button class="small-btn" onclick="openUserDetail('${item.user_id}', '${noteParam.replace(/'/g, "\\'")}', '${userNameParam}')">详情</button></td>`;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function exportCSV() {
+        const days = getSelectedDays();
+        const minLv = document.getElementById('filter-min-lv').value;
+        const maxLv = document.getElementById('filter-max-lv').value;
+        const incNone = document.getElementById('include-none-checkbox').checked;
+        try {
+            const res = await pywebview.api.export_leaderboard_csv(days, minLv, maxLv, incNone);
+            if (res.status === 'success') alert('已保存到：' + res.path);
+            else if (res.status === 'cancelled') { /* 用户取消 */ }
+            else alert('导出失败：' + res.message);
+        } catch (e) { alert('导出错误: ' + e); }
+    }
+
+    function openUserDetail(uid, note, userName) {
+        currentDetailUid = uid;
+        currentDetailPage = 1;
+        resetDetailDropdown();
+        // 无备注时仅显示 userName (uid)，有备注时显示 note  userName (uid)
+        const hasNote = note && note.trim() !== '';
+        const titleText = hasNote ? `${note}  ${userName} (${uid})` : `${userName} (${uid})`;
+        document.getElementById('detail-username').textContent = titleText;
+        document.getElementById('user-detail-modal').classList.remove('hidden');
+        loadUserPage();
+    }
+
+    async function loadUserPage() {
+        const container = document.getElementById('user-record-list');
+        container.innerHTML = '<div style="padding:20px; text-align:center;">加载中...</div>';
+        const difficulty = document.getElementById('detail-difficulty-filter').value;
+        try {
+            const res = await pywebview.api.get_user_records_page(currentDetailUid, currentDetailPage, difficulty);
+            if (res.status === 'success') {
+                renderRecordList(res.data);
+                updatePagination(res.total);
+            } else {
+                container.innerHTML = `<div style="color:red; text-align:center;">${res.message}</div>`;
+            }
+        } catch (e) { alert("获取详情失败: " + e); }
+    }
+
+    function renderRecordList(records) {
+        const container = document.getElementById('user-record-list');
+        container.innerHTML = '';
+        if (records.length === 0) {
+            container.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">本页无数据</div>';
+            return;
+        }
+        records.forEach(r => {
+            const row = document.createElement('div');
+            row.className = 'record-row';
+            row.innerHTML = `<span style="flex:1; font-size:13px; color:#666;">${r.post_date}</span><span style="flex:2; font-weight:500; cursor:pointer; color: var(--text-color);" onclick="pywebview.api.open_problem_window('${r.problem_number}')">${r.problem_name} <span style="font-size:12px;color:#999;">(${r.problem_number})</span></span><span style="flex:1; text-align:right;"><span class="diff-tag" style="background-color:${r.color}">${r.difficulty}</span></span>`;
+            container.appendChild(row);
+        });
+    }
+
+    function updatePagination(total) {
+        const pageSize = 10;
+        const totalPages = Math.ceil(total / pageSize) || 1;
+        document.getElementById('page-info').innerText = `第 ${currentDetailPage} / ${totalPages} 页 (共 ${total} 条)`;
+        document.getElementById('prev-page-btn').disabled = (currentDetailPage <= 1);
+        document.getElementById('next-page-btn').disabled = (currentDetailPage >= totalPages);
+    }
+
+    function changePage(delta) {
+        currentDetailPage += delta;
+        loadUserPage();
+    }
+
+    function closeUserDetailModal() {
+        document.getElementById('user-detail-modal').classList.add('hidden');
+    }
+
+    // ========== 监控名单管理 ==========
+    async function openConfigModal() {
+        document.getElementById('config-modal').classList.remove('hidden');
+        document.getElementById('uid-tags-area').innerHTML = '加载中...';
+        try {
+            const res = await pywebview.api.get_monitor_config();
+            if (res.status === 'success') {
+                currentMonitorList = res.data;
+                renderConfigTags();
+            }
+        } catch (e) { alert(e); }
+    }
+
+    function renderConfigTags() {
+        const container = document.getElementById('uid-tags-area');
+        container.innerHTML = '';
+        if (!currentMonitorList.length) { container.innerHTML = '<span style="color:#999;">暂无</span>'; return; }
+        currentMonitorList.forEach((item, idx) => {
+            const tag = document.createElement('div');
+            tag.className = 'uid-tag';
+            const displayNote = item.note || item.name || item.id;
+            const displayText = `${displayNote}  ${item.id}`;
+            tag.innerHTML = `${displayText} <span class="edit-note-btn" onclick="editNote(${idx})" title="编辑备注">✎</span> <span onclick="removeMonitorItem(${idx})">×</span>`;
+            container.appendChild(tag);
+        });
+    }
+
+    function addUidItem() {
+        const val = document.getElementById('new-uid-input').value.trim();
+        if (!val) return;
+        if (currentMonitorList.some(i => i.id === val)) return alert("已存在");
+        currentMonitorList.push({ id: val, name: "新增", note: "" });
+        renderConfigTags();
+        document.getElementById('new-uid-input').value = '';
+    }
+
+    function removeMonitorItem(idx) {
+        currentMonitorList.splice(idx, 1);
+        renderConfigTags();
+    }
+
+    function editNote(idx) {
+        currentEditIndex = idx;
+        const item = currentMonitorList[idx];
+        document.getElementById('note-edit-input').value = item.note || '';
+        document.getElementById('note-edit-dialog').classList.remove('hidden');
+        document.getElementById('note-edit-input').focus();
+    }
+
+    function closeNoteEdit() {
+        document.getElementById('note-edit-dialog').classList.add('hidden');
+        currentEditIndex = -1;
+    }
+
+    function saveNoteEdit() {
+        if (currentEditIndex >= 0) {
+            const newNote = document.getElementById('note-edit-input').value.trim();
+            currentMonitorList[currentEditIndex].note = newNote;
+            renderConfigTags();
+        }
+        closeNoteEdit();
+    }
+
+    async function saveConfig() {
+        const btn = document.getElementById('save-config-btn');
+        btn.innerText = "保存中..."; btn.disabled = true;
+        const payload = currentMonitorList.map(item => ({ id: item.id, note: item.note }));
+        try {
+            const res = await pywebview.api.save_monitor_config(payload);
+            if (res.status === 'success') { alert("保存成功，监控已重启"); closeConfigModal(); }
+            else alert(res.message);
+        } catch (e) { alert(e); }
+        btn.innerText = "保存并重启监控"; btn.disabled = false;
+    }
+    function closeConfigModal() { document.getElementById('config-modal').classList.add('hidden'); }
+
+    // ========== 通知 ==========
+    function createNotificationCard(data) {
+        const container = document.getElementById('notification-container');
+        const card = document.createElement('div');
+        card.className = 'notify-card';
+        card.style.borderLeft = `5px solid ${data.color}`;
+        card.innerHTML = `<div class="notify-header"><span class="notify-user">${data.user_name}</span><span class="notify-time">${data.time_str}</span></div><div class="notify-body">提交了 <b>${data.problem_number}</b><div class="notify-pname">${data.problem_name}</div></div><div class="notify-footer"><span class="difficulty-badge" style="background:${data.color}">${data.difficulty}</span></div><div class="notify-close" onclick="this.parentElement.remove()">×</div>`;
+        container.appendChild(card);
+        setTimeout(() => { card.classList.add('fade-out'); setTimeout(() => card.remove(), 500); }, 8000);
+    }
+
+    async function manualMonitor() {
+        const btn = document.getElementById('manual-monitor-btn');
+        btn.disabled = true; btn.innerText = '执行中...';
+        try {
+            await pywebview.api.trigger_manual_monitoring();
+        } catch (e) { alert('手动监控出错: ' + e); }
+        setTimeout(() => { btn.disabled = false; btn.innerText = '🔄 立即监控'; }, 5000);
+    }
+
+    // ========== 日志功能 ==========
+    async function openLogModal() {
+        const container = document.getElementById('log-entries');
+        const savedStates = {};
+        if (container.children.length > 0 && container.querySelector('.log-month')) {
+            container.querySelectorAll('.log-month').forEach(month => {
+                const summary = month.querySelector('.log-month-summary');
+                if (summary) {
+                    const monthKey = summary.textContent.trim();
+                    savedStates[monthKey] = { open: month.open, tasks: {} };
+                    month.querySelectorAll('.log-entry').forEach(task => {
+                        const taskSummary = task.querySelector('.log-summary');
+                        if (taskSummary) {
+                            const taskKey = taskSummary.textContent.trim();
+                            savedStates[monthKey].tasks[taskKey] = task.open;
+                        }
+                    });
+                }
+            });
+        }
+
+        document.getElementById('log-modal').classList.remove('hidden');
+        container.innerHTML = '<div style="text-align:center; color:#999;">加载中...</div>';
+        try {
+            const res = await pywebview.api.get_logs(500);
+            if (res.status === 'success') {
+                const allText = res.logs.join('');
+                if (!allText.trim()) {
+                    container.innerHTML = '<div style="text-align:center; color:#999;">暂无日志</div>';
+                    return;
+                }
+                const lines = allText.split('\n');
+                const entries = [];
+                let currentEntry = null;
+                const taskStartRegex = /(开始执行定时监控任务|手动监控任务开始)/;
+                const timestampRegex = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/;
+                for (const line of lines) {
+                    const taskMatch = line.match(taskStartRegex);
+                    if (taskMatch) {
+                        if (currentEntry) entries.push(currentEntry);
+                        const timeMatch = line.match(timestampRegex);
+                        currentEntry = {
+                            title: line.trim(),
+                            timeStr: timeMatch ? timeMatch[1] : null,
+                            body: []
+                        };
+                    } else if (currentEntry) {
+                        currentEntry.body.push(line);
+                    } else {
+                        if (!currentEntry) {
+                            currentEntry = { title: '启动日志', timeStr: null, body: [] };
+                        }
+                        currentEntry.body.push(line);
+                    }
+                }
+                if (currentEntry) entries.push(currentEntry);
+
+                entries.forEach(entry => {
+                    if (!entry.timeStr && entry.body.length > 0) {
+                        const firstLine = entry.body[0];
+                        const match = firstLine.match(timestampRegex);
+                        if (match) {
+                            entry.timeStr = match[1];
+                        }
+                    }
+                });
+
+                const monthsMap = new Map();
+                entries.forEach(entry => {
+                    let monthKey = '未知月份';
+                    if (entry.timeStr) {
+                        const parts = entry.timeStr.split(' ')[0].split('-');
+                        if (parts.length >= 2) {
+                            monthKey = `${parts[0]}-${parts[1]}`;
+                        }
+                    }
+                    if (!monthsMap.has(monthKey)) {
+                        monthsMap.set(monthKey, []);
+                    }
+                    monthsMap.get(monthKey).push(entry);
+                });
+
+                const sortedMonths = Array.from(monthsMap.keys()).sort((a, b) => {
+                    if (a === '未知月份') return 1;
+                    if (b === '未知月份') return -1;
+                    return b.localeCompare(a);
+                });
+
+                container.innerHTML = '';
+                sortedMonths.forEach(monthKey => {
+                    const monthEntries = monthsMap.get(monthKey);
+                    let monthDisplay = monthKey;
+                    if (monthKey !== '未知月份') {
+                        const [y, m] = monthKey.split('-');
+                        monthDisplay = `${y}年${parseInt(m)}月`;
+                    }
+                    const monthDetails = document.createElement('details');
+                    monthDetails.className = 'log-month';
+                    const monthSummaryText = `${monthDisplay} (${monthEntries.length} 项)`;
+                    if (savedStates[monthSummaryText] && savedStates[monthSummaryText].open === false) {
+                        monthDetails.open = false;
+                    } else {
+                        monthDetails.open = true;
+                    }
+                    const monthSummary = document.createElement('summary');
+                    monthSummary.className = 'log-month-summary';
+                    monthSummary.textContent = monthSummaryText;
+                    monthDetails.appendChild(monthSummary);
+
+                    const reversedEntries = monthEntries.slice().reverse();
+                    reversedEntries.forEach(entry => {
+                        const taskDetails = document.createElement('details');
+                        taskDetails.className = 'log-entry';
+                        const taskTitle = entry.title;
+                        if (savedStates[monthSummaryText] &&
+                            savedStates[monthSummaryText].tasks[taskTitle] !== undefined) {
+                            taskDetails.open = savedStates[monthSummaryText].tasks[taskTitle];
+                        }
+                        const taskSummary = document.createElement('summary');
+                        taskSummary.className = 'log-summary';
+                        taskSummary.textContent = taskTitle;
+                        taskDetails.appendChild(taskSummary);
+                        const pre = document.createElement('pre');
+                        pre.className = 'log-detail';
+                        pre.textContent = entry.body.join('\n');
+                        taskDetails.appendChild(pre);
+                        monthDetails.appendChild(taskDetails);
+                    });
+                    container.appendChild(monthDetails);
+                });
+            } else {
+                container.innerHTML = '<div style="color:red;">获取日志失败</div>';
+            }
+        } catch (e) {
+            document.getElementById('log-entries').innerHTML = '<div style="color:red;">获取日志出错: ' + e + '</div>';
+        }
+    }
+
+    async function clearLogs() {
+        const ok = await showConfirm('确定清空所有日志吗？');
+        if (!ok) return;
+        try {
+            const res = await pywebview.api.clear_logs();
+            if (res.status === 'success') {
+                document.getElementById('log-entries').innerHTML = '<div style="text-align:center; color:#999;">日志已清空</div>';
+            } else {
+                alert('清空失败：' + (res.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('清空日志出错：' + e);
+        }
+    }
+
+    async function exportLogs() {
+        try {
+            const res = await pywebview.api.export_logs();
+            if (res.status === 'success') {
+                alert('日志已导出到：' + res.path);
+            } else if (res.status === 'cancelled') {
+                // 用户取消
+            } else {
+                alert('导出失败：' + (res.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('导出日志出错：' + e);
+        }
+    }
+
+    function closeLogModal() {
+        document.getElementById('log-modal').classList.add('hidden');
+    }
+
+    // ========== 用户菜单 ==========
+    function toggleDropdown() {
+        document.getElementById('user-menu').classList.toggle('active');
+    }
+    window.onclick = e => {
+        if (!e.target.closest('.user-profile')) document.getElementById('user-menu').classList.remove('active');
+    };
+    async function handleLogout(e) {
+        e.stopPropagation();
+        await pywebview.api.logout();
+        location.reload();
+    }
+
+    // ========== 自定义下拉 ==========
+    function createCustomDropdown(containerId, selectId, onChangeCallback) {
+        const container = document.getElementById(containerId);
+        const select = document.getElementById(selectId);
+        if (!container || !select) return;
+        container.innerHTML = '';
+        const options = Array.from(select.options);
+        const trigger = document.createElement('div');
+        trigger.className = 'select-trigger';
+        container.appendChild(trigger);
+        const dropdown = document.createElement('div');
+        dropdown.className = 'select-dropdown';
+        container.appendChild(dropdown);
+        options.forEach(opt => {
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'select-option';
+            optionDiv.textContent = opt.text;
+            const bgColor = getColorByLabel(opt.text);
+            optionDiv.style.backgroundColor = bgColor;
+            optionDiv.dataset.value = opt.value;
+            optionDiv.addEventListener('click', (e) => {
+                e.stopPropagation();
+                select.value = opt.value;
+                updateTriggerDisplay(trigger, opt.text, bgColor);
+                dropdown.classList.remove('show');
+                trigger.classList.remove('open');
+                if (onChangeCallback) onChangeCallback(opt.value);
+            });
+            dropdown.appendChild(optionDiv);
+        });
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.contains('show');
+            document.querySelectorAll('.select-dropdown.show').forEach(d => d.classList.remove('show'));
+            document.querySelectorAll('.select-trigger.open').forEach(t => t.classList.remove('open'));
+            if (!isOpen) {
+                dropdown.classList.add('show');
+                trigger.classList.add('open');
+            }
+        });
+        document.addEventListener('click', () => {
+            dropdown.classList.remove('show');
+            trigger.classList.remove('open');
+        });
+        const initOption = select.options[select.selectedIndex];
+        const initText = initOption.text;
+        const initColor = getColorByLabel(initText);
+        updateTriggerDisplay(trigger, initText, initColor);
+        container._updateDisplay = (value) => {
+            const idx = Array.from(options).findIndex(o => o.value === value);
+            if (idx >= 0) {
+                const opt = options[idx];
+                const color = getColorByLabel(opt.text);
+                updateTriggerDisplay(trigger, opt.text, color);
+                select.value = value;
+            }
+        };
+    }
+
+    function updateTriggerDisplay(trigger, text, bgColor) {
+        trigger.innerHTML = `${text} <span class="select-arrow">▼</span>`;
+        trigger.style.backgroundColor = bgColor;
+    }
+
+    function initAllDropdowns() {
+        createCustomDropdown('min-difficulty-dropdown', 'filter-min-lv');
+        createCustomDropdown('max-difficulty-dropdown', 'filter-max-lv');
+        createCustomDropdown('detail-difficulty-dropdown', 'detail-difficulty-filter', () => {
+            loadUserPage();
+        });
+    }
+
+    function resetDetailDropdown() {
+        const container = document.getElementById('detail-difficulty-dropdown');
+        if (container && container._updateDisplay) {
+            container._updateDisplay('');
+        }
+        document.getElementById('detail-difficulty-filter').value = '';
+    }
+
+    // ========== 主题管理 ==========
+    const presetThemes = {
+        default: {
+            '--bg-gradient-start': '#667eea', '--bg-gradient-end': '#764ba2', '--card-bg': 'rgba(255, 255, 255, 0.95)',
+            '--main-bg': '#f4f7f6', '--primary-color': '#764ba2', '--text-color': '#333', '--text-secondary': '#666',
+            '--border-color': '#eee', '--header-bg': '#fff', '--table-header-bg': '#f1f3f5', '--tag-bg': '#eef2ff',
+            '--close-btn-color': '#000'
+        },
+        ink: {
+            '--bg-gradient-start': '#1a1225', '--bg-gradient-end': '#0e0a16', '--card-bg': '#221c33',
+            '--main-bg': '#120e1c', '--primary-color': '#3a2e5a', '--text-color': '#e6d9ff', '--text-secondary': '#b9a9e0',
+            '--border-color': '#3e3360', '--header-bg': '#161021', '--table-header-bg': '#2a233f', '--tag-bg': '#30284d',
+            '--close-btn-color': '#ccc'
+        },
+        blue: {
+            '--bg-gradient-start': '#4facfe', '--bg-gradient-end': '#00f2fe', '--card-bg': 'rgba(255, 255, 255, 0.96)',
+            '--main-bg': '#eef2f7', '--primary-color': '#2196f3', '--text-color': '#333', '--text-secondary': '#666',
+            '--border-color': '#e0e0e0', '--header-bg': '#fff', '--table-header-bg': '#e3f2fd', '--tag-bg': '#e3f2fd',
+            '--close-btn-color': '#000'
+        },
+        light: {
+            '--bg-gradient-start': '#ffffff', '--bg-gradient-end': '#f8f9fa', '--card-bg': '#ffffff',
+            '--main-bg': '#fafafc', '--primary-color': '#9c8e8e', '--text-color': '#1e2a3a', '--text-secondary': '#6c757d',
+            '--border-color': '#e9ecef', '--header-bg': '#ffffff', '--table-header-bg': '#f8f9fa', '--tag-bg': '#f1f3f5',
+            '--close-btn-color': '#000'
+        }
+    };
+
+    function applyThemeVariables(vars) {
+        const root = document.documentElement;
+        for (let [key, value] of Object.entries(vars)) {
+            root.style.setProperty(key, value);
+        }
+    }
+
+    function getCurrentThemeVariables() {
+        const root = getComputedStyle(document.documentElement);
+        return {
+            '--bg-gradient-start': root.getPropertyValue('--bg-gradient-start').trim(),
+            '--bg-gradient-end': root.getPropertyValue('--bg-gradient-end').trim(),
+            '--card-bg': root.getPropertyValue('--card-bg').trim(),
+            '--main-bg': root.getPropertyValue('--main-bg').trim(),
+            '--primary-color': root.getPropertyValue('--primary-color').trim(),
+            '--text-color': root.getPropertyValue('--text-color').trim(),
+            '--text-secondary': root.getPropertyValue('--text-secondary').trim(),
+            '--border-color': root.getPropertyValue('--border-color').trim(),
+            '--header-bg': root.getPropertyValue('--header-bg').trim(),
+            '--table-header-bg': root.getPropertyValue('--table-header-bg').trim(),
+            '--tag-bg': root.getPropertyValue('--tag-bg').trim(),
+            '--close-btn-color': root.getPropertyValue('--close-btn-color').trim()
+        };
+    }
+
+    function fillColorPickers(vars) {
+        document.getElementById('c-bg-start').value = rgbToHex(vars['--bg-gradient-start']);
+        document.getElementById('c-bg-end').value = rgbToHex(vars['--bg-gradient-end']);
+        document.getElementById('c-card-bg').value = rgbToHex(vars['--card-bg']);
+        document.getElementById('c-main-bg').value = rgbToHex(vars['--main-bg']);
+        document.getElementById('c-primary').value = rgbToHex(vars['--primary-color']);
+        document.getElementById('c-text').value = rgbToHex(vars['--text-color']);
+        document.getElementById('c-text-secondary').value = rgbToHex(vars['--text-secondary']);
+        document.getElementById('c-border').value = rgbToHex(vars['--border-color']);
+        document.getElementById('c-header-bg').value = rgbToHex(vars['--header-bg']);
+        document.getElementById('c-table-header').value = rgbToHex(vars['--table-header-bg']);
+        document.getElementById('c-tag-bg').value = rgbToHex(vars['--tag-bg']);
+        document.getElementById('c-close-btn').value = rgbToHex(vars['--close-btn-color']);
+    }
+
+    function getCurrentPickerValues() {
+        return {
+            '--bg-gradient-start': document.getElementById('c-bg-start').value,
+            '--bg-gradient-end': document.getElementById('c-bg-end').value,
+            '--card-bg': document.getElementById('c-card-bg').value,
+            '--main-bg': document.getElementById('c-main-bg').value,
+            '--primary-color': document.getElementById('c-primary').value,
+            '--text-color': document.getElementById('c-text').value,
+            '--text-secondary': document.getElementById('c-text-secondary').value,
+            '--border-color': document.getElementById('c-border').value,
+            '--header-bg': document.getElementById('c-header-bg').value,
+            '--table-header-bg': document.getElementById('c-table-header').value,
+            '--tag-bg': document.getElementById('c-tag-bg').value,
+            '--close-btn-color': document.getElementById('c-close-btn').value
+        };
+    }
+
+    function updatePreview(vars) {
+        const preview = document.getElementById('custom-preview');
+        if (!preview) return;
+        for (let [key, value] of Object.entries(vars)) {
+            preview.style.setProperty(key, value);
+        }
+        const btnDiv = preview.querySelector('div:first-child');
+        if (btnDiv) btnDiv.style.backgroundColor = vars['--primary-color'];
+        const textDiv = preview.querySelector('div:nth-child(2)');
+        if (textDiv) {
+            textDiv.style.backgroundColor = vars['--card-bg'];
+            textDiv.style.color = vars['--text-color'];
+            textDiv.style.borderTopColor = vars['--border-color'];
+            const span = textDiv.querySelector('span');
+            if (span) span.style.color = vars['--text-secondary'];
+        }
+        const headerDiv = preview.querySelector('div:last-child');
+        if (headerDiv) {
+            headerDiv.style.backgroundColor = vars['--table-header-bg'];
+            headerDiv.style.color = vars['--text-secondary'];
+            headerDiv.style.borderTopColor = vars['--border-color'];
+        }
+    }
+
+    function bindColorInputEvents() {
+        const ids = ['c-bg-start', 'c-bg-end', 'c-card-bg', 'c-main-bg', 'c-primary',
+                     'c-text', 'c-text-secondary', 'c-border', 'c-header-bg',
+                     'c-table-header', 'c-tag-bg', 'c-close-btn'];
+        ids.forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                const vars = getCurrentPickerValues();
+                updatePreview(vars);
+            });
+        });
+    }
+
+    function saveCustomTheme(vars) {
+        localStorage.setItem('luogu_theme', 'custom');
+        localStorage.setItem('luogu_custom_theme', JSON.stringify(vars));
+        applyThemeVariables(vars);
+    }
+
+    function loadCustomTheme() {
+        const saved = localStorage.getItem('luogu_custom_theme');
+        if (saved) {
+            const vars = JSON.parse(saved);
+            applyThemeVariables(vars);
+            document.documentElement.removeAttribute('data-theme');
+            document.body.classList.add('custom-theme');
+            return true;
+        }
+        return false;
+    }
+
+    function loadTheme() {
+        const savedTheme = localStorage.getItem('luogu_theme');
+        if (savedTheme === 'custom') {
+            if (!loadCustomTheme()) {
+                applyThemeVariables(presetThemes.default);
+            }
+        } else if (savedTheme && presetThemes[savedTheme]) {
+            applyThemeVariables(presetThemes[savedTheme]);
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.body.classList.remove('custom-theme');
+        } else {
+            applyThemeVariables(presetThemes.default);
+        }
+    }
+
+    function openThemeModal() {
+        document.getElementById('theme-modal').classList.remove('hidden');
+        const currentVars = getCurrentThemeVariables();
+        fillColorPickers(currentVars);
+        updatePreview(currentVars);
+    }
+
+    function closeThemeModal() {
+        document.getElementById('theme-modal').classList.add('hidden');
+    }
+
+    function rgbToHex(color) {
+        if (!color || color === '') return '#000000';
+        if (color.startsWith('#')) return color;
+        const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (match) {
+            return '#' + ((1 << 24) + (parseInt(match[1]) << 16) + (parseInt(match[2]) << 8) + parseInt(match[3])).toString(16).slice(1);
+        }
+        return '#ffffff';
+    }
+
+    // ========== 初始化 ==========
+    function waitForPywebview() {
+        if (window.pywebview) initCheck();
+        else setTimeout(waitForPywebview, 100);
+    }
+
+    async function initCheck() {
+        try {
+            const res = await pywebview.api.init_check();
+            if (res.status === 'success') showWelcome(res.username);
+            else document.getElementById('loading-overlay').classList.add('hidden');
+        } catch (e) {}
+    }
+
+    // ========== 事件绑定 ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('global-close-btn').addEventListener('click', closeApp);
+        document.getElementById('login-btn').addEventListener('click', submitLogin);
+        document.getElementById('log-btn').addEventListener('click', openLogModal);
+        document.getElementById('csv-btn').addEventListener('click', exportCSV);
+        document.getElementById('theme-btn').addEventListener('click', openThemeModal);
+        document.getElementById('user-profile').addEventListener('click', toggleDropdown);
+        document.getElementById('logout-item').addEventListener('click', handleLogout);
+        document.getElementById('pause-resume-btn').addEventListener('click', togglePauseResume);
+        document.getElementById('config-btn').addEventListener('click', openConfigModal);
+        document.getElementById('manual-monitor-btn').addEventListener('click', manualMonitor);
+        document.getElementById('search-btn').addEventListener('click', loadLeaderboard);
+        document.getElementById('filter-days').addEventListener('change', handleTimeFilterChange);
+        document.getElementById('add-uid-btn').addEventListener('click', addUidItem);
+        document.getElementById('cancel-config-btn').addEventListener('click', closeConfigModal);
+        document.getElementById('save-config-btn').addEventListener('click', saveConfig);
+        document.getElementById('close-config-modal').addEventListener('click', closeConfigModal);
+        document.getElementById('prev-page-btn').addEventListener('click', () => changePage(-1));
+        document.getElementById('next-page-btn').addEventListener('click', () => changePage(1));
+        document.getElementById('close-user-detail-modal').addEventListener('click', closeUserDetailModal);
+        document.getElementById('close-theme-modal').addEventListener('click', closeThemeModal);
+        document.getElementById('apply-custom-theme').addEventListener('click', () => {
+            const vars = getCurrentPickerValues();
+            saveCustomTheme(vars);
+            closeThemeModal();
+        });
+        document.getElementById('reset-custom-theme').addEventListener('click', () => {
+            applyThemeVariables(presetThemes.default);
+            localStorage.setItem('luogu_theme', 'default');
+            localStorage.removeItem('luogu_custom_theme');
+            document.documentElement.removeAttribute('data-theme');
+            document.body.classList.remove('custom-theme');
+            fillColorPickers(presetThemes.default);
+            updatePreview(presetThemes.default);
+            closeThemeModal();
+        });
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const theme = btn.getAttribute('data-theme');
+                const vars = presetThemes[theme];
+                if (vars) {
+                    applyThemeVariables(vars);
+                    localStorage.setItem('luogu_theme', theme);
+                    localStorage.removeItem('luogu_custom_theme');
+                    document.documentElement.setAttribute('data-theme', theme);
+                    document.body.classList.remove('custom-theme');
+                    fillColorPickers(vars);
+                    updatePreview(vars);
+                }
+                closeThemeModal();
+            });
+        });
+        document.getElementById('clear-logs-btn').addEventListener('click', clearLogs);
+        document.getElementById('export-logs-btn').addEventListener('click', exportLogs);
+        document.getElementById('close-log-btn').addEventListener('click', closeLogModal);
+        document.getElementById('close-log-modal').addEventListener('click', closeLogModal);
+        document.getElementById('refresh-logs-btn').addEventListener('click', openLogModal);
+
+        document.getElementById('note-edit-save').addEventListener('click', saveNoteEdit);
+        document.getElementById('note-edit-cancel').addEventListener('click', closeNoteEdit);
+
+        const sigElem = document.getElementById('signature-text');
+        if (sigElem) {
+            sigElem.addEventListener('mousedown', (e) => e.stopPropagation());
+            sigElem.addEventListener('mousemove', (e) => e.stopPropagation());
+            sigElem.addEventListener('mouseup', (e) => e.stopPropagation());
+            sigElem.addEventListener('blur', saveSignature);
+        }
+
+        handleTimeFilterChange();
+        initAllDropdowns();
+        loadTheme();
+        bindColorInputEvents();
+        waitForPywebview();
+    });
+</script>
+</body>
+</html>
